@@ -1,4 +1,6 @@
-### Day 4 Milestones Achieved
+### # Day4 :: Agentic AI
+
+**topic** Practice Tool calling
 
 * Mastered the JSON schema object structure and property definitions to enforce strict data typing (strings vs. integers).
 

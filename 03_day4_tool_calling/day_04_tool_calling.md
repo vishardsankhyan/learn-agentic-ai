@@ -1,4 +1,5 @@
-# Day 4: Tool Calling & The Agentic Brain
+# Day 4: Agenti AI
+**Topic** Tool Calling & The Agentic Brain
 
 **1. The Tool Calling Architecture**
 * **Concept:** LLMs cannot execute code natively. Tool calling is a standardized handoff where the LLM reads a "manual" (JSON schema) of your available Python functions and returns the exact arguments needed to run them.
