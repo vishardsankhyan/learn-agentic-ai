@@ -1,4 +1,4 @@
-# Day 4: Agenti AI
+# Day 4: Agenti AIs
 **Topic** Tool Calling & The Agentic Brain
 
 **1. The Tool Calling Architecture**
