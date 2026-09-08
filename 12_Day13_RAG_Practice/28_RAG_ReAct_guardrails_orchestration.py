@@ -114,8 +114,7 @@ def llm_call(user_input: str):
                 raw_arg = json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
                 try:
-                    validated_args = ValidatedArgs(**raw_arg)
-
+                    
                     try:
                         if func_name == "search_confluence":
                             result_search = search_confluence(app_name=raw_arg.get("app_name", ""))
@@ -123,6 +122,7 @@ def llm_call(user_input: str):
                             messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": result_search})
                         
                         elif func_name == "deploy_netscaler_vip":
+                            validated_args = ValidatedArgs(**raw_arg)
                             result_deploy = deploy_nestscaler_vip(app_name=validated_args.app_name, vip_ip=str(validated_args.vip_ip), port=int(validated_args.port))
                             output.append(f"[DEPLOY STATUS]: {result_deploy}")
                             messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": result_deploy})
