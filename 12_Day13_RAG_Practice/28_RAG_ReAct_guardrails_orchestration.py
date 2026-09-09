@@ -111,27 +111,24 @@ def llm_call(user_input: str):
             func_name = tool_calls[0].function.name
 
             if func_name in tool_dispatcher:
-                raw_arg = json.loads(response.choices[0].message.tool_calls[0].function.arguments)
-
+                raw_arg = json.loads(response.choices[0].message.tool_calls[0].function.arguments                
                 try:
-                    
-                    try:
-                        if func_name == "search_confluence":
-                            result_search = search_confluence(app_name=raw_arg.get("app_name", ""))
-                            output.append(f"[CONFLUENCE SEARCH]: {result_search}")
-                            messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": result_search})
+                    if func_name == "search_confluence":
+                        result_search = search_confluence(app_name=raw_arg.get("app_name", ""))
+                        output.append(f"[CONFLUENCE SEARCH]: {result_search}")
+                        messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": result_search})
                         
-                        elif func_name == "deploy_netscaler_vip":
-                            validated_args = ValidatedArgs(**raw_arg)
-                            result_deploy = deploy_nestscaler_vip(app_name=validated_args.app_name, vip_ip=str(validated_args.vip_ip), port=int(validated_args.port))
-                            output.append(f"[DEPLOY STATUS]: {result_deploy}")
-                            messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": result_deploy})
+                    elif func_name == "deploy_netscaler_vip":
+                        validated_args = ValidatedArgs(**raw_arg)
+                        result_deploy = deploy_nestscaler_vip(app_name=validated_args.app_name, vip_ip=str(validated_args.vip_ip), port=int(validated_args.port))
+                        output.append(f"[DEPLOY STATUS]: {result_deploy}")
+                        messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": result_deploy})
 
-                    except RuntimeError as run_err:
-                        output.append(f"RUNTIME ERROR: {run_err}")
-                        messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": str(run_err)})    
-                except ValidationError as val_err:
-                    output.append(f"VALIDATION ERROR: {val_err}")
+                except RuntimeError as run_err:
+                    output.append(f"RUNTIME ERROR: {run_err}")
+                    messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": str(run_err)})    
+            except ValidationError as val_err:
+                output.append(f"VALIDATION ERROR: {val_err}")
                     messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": str(val_err)})
             else :
                 output.append("UNAUTHORIZED FUNCTION CALL")

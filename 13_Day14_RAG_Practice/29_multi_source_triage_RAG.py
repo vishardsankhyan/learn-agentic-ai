@@ -1,0 +1,197 @@
+import os
+import json 
+from dotenv import load_dotenv
+from openai import OpenAI
+from pydantic import BaseModel, ValidationError
+from typing import Literal
+
+load_dotenv()
+#client = OpenAI(
+#    api_key=os.getenv("GEMINI_API_KEY"),
+#    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+#    timeout=20
+#)
+
+client = OpenAI(
+    api_key=os.getenv("GROQ_API_KEY"),
+    base_url="https://api.groq.com/openai/v1/"
+)
+
+class ValidationArgs(BaseModel):
+    target_vip: str
+    env: Literal["prod", "staging"]
+
+MONITORING_ALERTS = {
+    "payment_gateway": "CRITICAL: VServer down. Code: ERR_503",
+    "inventory_api": "WARN: High latency. Code: ERR_TIMEOUT"
+}
+
+RUNBOOK = {
+    "ERR_503": "VServer backend overload. Action required: restart_vserver. Target: prod-vip-01, Env: prod",
+    "ERR_TIMEOUT": "Database locked. Action required: clear_cache. Target: db-cluster-main, Env: prod"
+}
+
+def check_monitoring(app_name: str) -> str:
+    normalize_input = app_name.lower().replace(" ","_")
+
+    if normalize_input in MONITORING_ALERTS:
+        return f"[Result]:  {app_name}: {MONITORING_ALERTS[normalize_input]}"
+    
+    else:
+        return f"[Error]: No Alert not found"
+
+
+def search_runbook(error_code: str) -> str:
+    normalize_err = error_code.upper().replace(" ", "_")
+
+    if normalize_err in RUNBOOK:
+        return f"[Result]: {error_code} : {RUNBOOK[normalize_err]}"
+    else:
+        return f"[Error]: {normalize_err}The error not found in Database, please try again"
+
+
+def restart_vserver(target_vip: str, env: str) -> str:
+    return f"Success: Restarted {target_vip} and {env}"
+
+tool_dispatcher = {
+    'check_monitoring':check_monitoring,
+    'search_runbook': search_runbook,
+    'restart_vserver': restart_vserver
+}
+
+monitor_tool = {
+    "type": "function",
+    "function": {
+        "name": "check_monitoring",
+        "description": "The tool will the check the monitoring alerts in the database MONITORING_ALERT",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "app_name": {
+                    "type": "string"
+                }
+            },
+            "required": ["app_name"]
+        }
+    }
+}
+
+search_tool = {
+    "type": "function",
+    "function": {
+        "name": "search_runbook",
+        "description": "The function checks internal Database RUNBOOK and return the action required for any error observed ",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "error_code": {
+                    "type": "string"
+                }
+            },
+            "required": ["error_code"]
+        }
+    }
+}
+
+restart_tool = {
+    "type": "function",
+    "function": {
+        "name": "restart_vserver",
+        "description": "This function restart the vServer",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "target_vip": {"type": "string", "description": "It is the VIP ip address"},
+                "env": {"type": "string", "description": "Whether environemtn is prod or staging"}
+            },
+            "required": ["target_vip", "env"]
+        }
+    }
+}
+
+
+def llm_call(user_input: str):
+    """ The Agent job is to check the monitoring alerts in db MONITORING_ALERTS and check the steps to be followed for any error in MONITORING_ALERTS and execute the steps from RUNBOOK"""
+
+    messages = [
+        {"role": "system", "content": "You are a L2 triage agent. When the application goes down, you must check_monitoring to get the error code, the search_runbook with the exact error code to find the fix and must execute the actions"},
+        {"role": "user", "content": user_input}
+    ]
+
+    output = []
+    current_turn = 0
+    max_turn = 5
+
+    while current_turn < max_turn:
+        output.append(f"------- Turn: {current_turn+1}----------")
+        current_turn += 1
+
+        try:
+            response = client.chat.completions.create(
+                model="openai/gpt-oss-120b", #"gemini-3.6-flash",
+                tools=[monitor_tool, search_tool, restart_tool],
+                temperature=0.0,
+                messages=messages
+            )
+
+            tool_calls = response.choices[0].message.tool_calls
+            messages.append(response.choices[0].message)
+
+            if not tool_calls:
+                output.append(f"[Final Result]: {response.choices[0].message.content}")
+                break
+            
+            func_name = tool_calls[0].function.name
+
+            if func_name in tool_dispatcher:
+                try:
+                    raw_args = json.loads(tool_calls[0].function.arguments)
+
+                    if func_name == "check_monitoring":
+                        m_result = tool_dispatcher[func_name](app_name=raw_args.get("app_name"," "))
+                        output.append(f"[MONITORING]: {func_name}: {m_result}")
+                        messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": m_result})
+                    
+                    elif func_name == "search_runbook":
+                        s_result = tool_dispatcher[func_name](error_code=raw_args.get("error_code", ""))
+                        output.append(f"[Search RUNBOOK]: {func_name}: {s_result}")
+                        messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": s_result})
+                    
+                    elif func_name == "restart_vserver":
+                        try:
+                            validatedArg = ValidationArgs(**raw_args)
+                            r_result = tool_dispatcher[func_name](target_vip=str(validatedArg.target_vip), env=str(validatedArg.env))
+                            output.append(f"[ACTION]: {func_name}: {r_result}")
+                            messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": r_result})
+                        
+                        except ValidationError as val_err:
+                            output.append(f"[VALIDATION ERROR]: {val_err}")
+                            messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": str(val_err)})
+                    
+                except RuntimeError as run_err:
+                    output.append(f"[EXCEPTION]: Runtime Error {run_err}")
+                    messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": str(run_err)})
+
+            else:
+                output.append("[ERROR]: Unauthorised function call")
+                messages.append({"role": "tool", "tool_call_id": tool_calls[0].id, "name": func_name, "content": "Unauthorized function call,  please try another function to proceed further"})
+                
+        except Exception as e:
+            output.append(f"[EXCEPTION]: Top layer {e}")
+
+    if current_turn >= max_turn:
+        output.append(" [ERROR]: Max turn has reached and circuit break initiated") 
+    
+    return "\n".join(output)
+
+
+if __name__ == "__main__":
+    user_input = "Gyani G reported that the payment_gateway is down. Please investigate and fix it."
+
+    print(f"Agent is working .... \n\n {llm_call(user_input)}")
+
+
+                    
+
+
+        
