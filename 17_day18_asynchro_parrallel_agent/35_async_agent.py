@@ -102,7 +102,7 @@ async def bgyani_g_triage(user_prompt: str) -> str:
         print("\n [EXECUTION]:Firing all the tasks simulteneously")
         start_time = time.time()
 
-        print(f"\n\n [PENDING TASK]: {pending_task}\n\n")
+        #print(f"\n\n [PENDING TASK]: {pending_task}\n\n")
 
         results = await asyncio.gather(*pending_task,return_exceptions=True)
 
