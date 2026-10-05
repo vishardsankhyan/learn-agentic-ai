@@ -1,0 +1,4 @@
+## 6. Execution Runner (The Daemon & Sticky Sessions)
+* **The Chat Loop**: Transitioned the script from a single-run batch job to a continuous listening service using a `while True` loop, enabling back-and-forth troubleshooting with the user.
+* **Sticky Sessions (`thread_id`)**: `config = {"configurable": {"thread_id": "bgyani_ticket_001"}}` acts exactly like a load balancer sticky cookie. LangGraph uses this unique ID to query the SQLite database, retrieve the prior chat history, and maintain TCP-like session state across multiple loop iterations.
+* **Payload Extraction**: The Gemini Python SDK occasionally wraps responses in JSON metadata arrays (e.g., `[{'type': 'text', 'text': '...'}]`). The runner intercepts `raw_packet.content`, checks its data type using `isinstance()`, and strips away these structural wrappers to present clean text to the end-user.
